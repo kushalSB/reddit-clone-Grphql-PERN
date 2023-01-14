@@ -40,38 +40,49 @@ class UserResponse {
 
 @Resolver()
 export class UserResolver {
-  @Mutation(() => User)
+  @Mutation(() => UserResponse, { nullable: true })
   async register(
     @Arg("options") options: UsernamePasswordInput,
     @Ctx() { emFork }: MyContext
   ): Promise<UserResponse> {
-    if (options.username.length < 8) {
+    if (options.username.length < 3) {
       return {
         errors: [
           {
             field: "username error",
-            message: "Username less than 8 character",
+            message: "Username less than 3 character",
+          },
+        ],
+      };
+    }
+    if (options.password.length < 8) {
+      return {
+        errors: [
+          {
+            field: "password error",
+            message: "Password less than 8 character",
           },
         ],
       };
     }
 
     const hashedPassword = await argon2.hash(options.password);
-    try {
-      const user = emFork.create(User, {
-        username: options.username,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        password: hashedPassword,
-      });
 
+    const user = emFork.create(User, {
+      username: options.username,
+      password: hashedPassword,
+    } as User);
+    try {
       await emFork.persistAndFlush(user);
-      return { user };
-    } catch {
-      return {
-        errors: [{ field: "error", message: "someting wrong happened" }],
-      };
+    } catch (err) {
+      if (err.code === "23505") {
+        return {
+          errors: [{ field: "username", message: "username already taken" }],
+        };
+      }
     }
+
+    return { user };
   }
 
   // return "this is for user";
@@ -80,7 +91,7 @@ export class UserResolver {
   async login(
     @Arg("options") options: UsernamePasswordInput,
 
-    @Ctx() { emFork }: MyContext
+    @Ctx() { emFork, req }: MyContext
   ): Promise<UserResponse> {
     const user = await emFork.findOne(User, { username: options.username });
     if (!user) {
@@ -94,7 +105,7 @@ export class UserResolver {
         errors: [{ field: "password", message: "Password doesnt match" }],
       };
     }
-
+    req.session.userId = user.id;
     return { user };
 
     // return "this is for user";

@@ -10,6 +10,11 @@ import { HelloResolver } from "./resolvers/hello";
 import { PostResolver } from "./resolvers/post";
 import { UserResolver } from "./resolvers/user";
 
+import session from "express-session";
+import connectRedis from "connect-redis";
+import * as redis from "redis";
+import { MyContext } from "./types";
+
 const main = async () => {
   const orm = await MikroORM.init(microConfig);
   const emFork = orm.em.fork();
@@ -17,16 +22,50 @@ const main = async () => {
 
   const app = express();
 
+  const RedisStore = connectRedis(session);
+  const redisClient = redis.createClient({
+    socket: {
+      host: "localhost",
+      port: 6379,
+    },
+    legacyMode: true,
+  });
+  await redisClient.connect();
+
+  // app.set("trust proxy", !__prod__);
+  app.use(
+    session({
+      name: "qid",
+      store: new RedisStore({
+        client: redisClient as any,
+        disableTouch: true,
+        disableTTL: true,
+      }),
+      cookie: {
+        maxAge: 1000 * 60 * 60 * 24 * 365 * 5,
+        httpOnly: true,
+        secure: true,
+        sameSite: __prod__ ? "lax" : "none",
+      },
+      saveUninitialized: false,
+      secret: "rupeshisahero",
+      resave: false,
+    })
+  );
+
   const apolloServer = new ApolloServer({
     schema: await buildSchema({
       resolvers: [HelloResolver, PostResolver, UserResolver],
       validate: false,
     }),
-    context: () => ({ emFork: emFork }),
+    context: ({ req, res }): MyContext => ({ emFork: emFork, req, res }),
   });
 
   await apolloServer.start();
-  apolloServer.applyMiddleware({ app });
+  apolloServer.applyMiddleware({
+    app,
+    cors: { origin: "https://studio.apollographql.com", credentials: true },
+  });
 
   app.get("/", (_, res) => {
     res.send("wassup");

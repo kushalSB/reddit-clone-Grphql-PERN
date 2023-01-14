@@ -1,22 +1,21 @@
 import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
 import { ObjectType, Field } from "type-graphql";
 
-
 @ObjectType()
 @Entity()
 export class User {
   @Field()
-  @PrimaryKey({ type: "number" })
+  @PrimaryKey({ autoincrement: true })
   id!: number;
 
   @Field(() => String)
-  @Property({ type: "date" })
+  @Property({ type: "timestamp" })
   createdAt = new Date();
 
   @Field(() => String)
   @Property({
     onUpdate: () => new Date(),
-    type: "date",
+    type: "timestamp",
   })
   updatedAt = new Date();
 
